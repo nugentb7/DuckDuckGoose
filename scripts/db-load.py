@@ -37,7 +37,6 @@ def units_and_chemicals(session):
             unit = row["unit"].strip()
             unit = (unit if unit else "N/A").encode("utf-8")
 
-            logging.info(unit)
             # first check that a unit of measurement record exists
             unit_of_measure = session.query(UnitOfMeasure).filter_by(unit_name=unit).first()
             if not unit_of_measure:
@@ -110,6 +109,7 @@ def locations_and_readings(session):
             date = datetime.datetime.strptime(f"{parts[0]}-{parts[1]}-{year}", "%d-%b-%Y").date()
             
             reading = WaterwayReading(
+                id=int(row["id"]),
                 value=row["value"], 
                 location=location, 
                 chemical=chemical, 
