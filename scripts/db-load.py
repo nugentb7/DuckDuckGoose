@@ -33,7 +33,7 @@ def units_and_chemicals(session):
         next(reader)  # skip the header
         for row in reader:
             display = row["measure"].strip()
-            name = row["measure"].upper()
+            name = row["measure"].upper().strip()
             unit = row["unit"].strip()
             unit = (unit if unit else "N/A").encode("utf-8")
 
