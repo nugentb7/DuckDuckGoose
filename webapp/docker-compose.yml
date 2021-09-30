@@ -1,0 +1,11 @@
+version: '3.4'
+services:
+  web:
+    restart: unless-stopped
+    build: .
+    environment:
+      TZ: "America/New_York"
+    expose:
+      - "80"
+    ports:
+      - "5000:80"
