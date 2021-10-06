@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
-from flask import Flask
-from models import db, Location
+from flask import Flask, render_template
+from models import db, Location, Chemical, WaterwayReading
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///waterways.db"
@@ -17,7 +17,12 @@ db.init_app(app)
 
 @app.route("/")
 def index():
-    return "<h1>hello, world</h1>"
+    return render_template(
+        "index.html",
+        sensors=Location.all_sensors(),
+        min_date=WaterwayReading.min_sample_date(),
+        max_date=WaterwayReading.max_sample_date()
+    )
 
 @app.route("/rest/location/<int:id>", methods=["GET"])
 @app.route("/rest/location/name/<string:id>")
@@ -25,6 +30,10 @@ def index():
 def location(id=None):
     return Location.get(id)
     
+@app.route("/rest/measure", methods=["GET"])
+def measure():
+    return Chemical.search()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

@@ -1,8 +1,10 @@
 # coding: utf-8
 import logging
+from operator import or_
 from flask_sqlalchemy import SQLAlchemy
-from flask import request
+from flask import request, url_for
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy import or_, func
 
 
 db = SQLAlchemy()
@@ -22,6 +24,22 @@ class Chemical(db.Model):
     unit_of_measure = db.relationship('UnitOfMeasure', primaryjoin='Chemical.unit_of_measure_id == UnitOfMeasure.id', backref='chemicals')
 
 
+    @staticmethod
+    def search():
+        term = request.args.get("term")
+        if not term:
+            return {"results": []}, 200
+        else:
+            term = str(term).upper()
+            results = Chemical.query.filter(
+                or_(
+                    Chemical.name.like(f"{term}%"), 
+                    func.upper(Chemical.display).like(f"{term}%")
+                )
+            ).order_by(Chemical.name).all()
+            return {"results": [{"id": r.id, "text": f"{r.display} ({str(r.unit_of_measure)})"} for r in results]}, 200
+
+
 class Location(db.Model):
     __tablename__ = 'location'
 
@@ -33,6 +51,13 @@ class Location(db.Model):
     location_type_id = db.Column(db.ForeignKey('location_type.id'))
 
     location_type = db.relationship('LocationType', primaryjoin='Location.location_type_id == LocationType.id', backref='locations')
+
+
+    @staticmethod
+    def all_sensors():
+        return Location.query.filter_by(
+            location_type=LocationType.query.filter_by(name="SENSOR").first()
+        ).order_by(Location.name).all()
 
 
     @staticmethod
@@ -50,6 +75,13 @@ class Location(db.Model):
             response = Location.all_locations_geojson(include_waste=not(request.args.get("nowaste") == "Y")), 200
         return response
 
+    @hybrid_property
+    def lat_long(self):
+        return [float(self.latitude), float(self.longitude)]
+
+    @hybrid_property
+    def long_lat(self):
+        return [float(self.longitude), float(self.latitude)]
 
     @hybrid_property
     def geojson(self):
@@ -58,6 +90,7 @@ class Location(db.Model):
             "properties": { 
                 "id": self.id, 
                 "name": self.name, 
+                "display": self.display,
                 "type": {
                     "id": self.location_type.id,
                     "name": self.location_type.name
@@ -65,7 +98,15 @@ class Location(db.Model):
             }, 
             "geometry": { 
                 "type": "Point", 
-                "coordinates": [ float(self.longitude), float(self.latitude) ] 
+                "coordinates": self.long_lat
+            }, 
+            "icon": {
+                "iconUrl": url_for("static", filename=("icons/" + ("waste.png" if self.location_type.name == "WASTE" else "sensor.png"))),
+                "iconSize": [30, 30], 
+                "latlng": self.lat_long
+            },
+            "style": {
+                "color": "red" if self.location_type.name == "SENSOR" else "green"
             } 
         }
     
@@ -109,6 +150,8 @@ class UnitOfMeasure(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_name = db.Column(db.String(10), unique=True)
 
+    def __str__(self):
+        return self.unit_name.decode()
 
 
 class WaterwayReading(db.Model):
@@ -123,6 +166,18 @@ class WaterwayReading(db.Model):
     chemical = db.relationship('Chemical', primaryjoin='WaterwayReading.chemical_id == Chemical.id', backref='waterway_readings')
     location = db.relationship('Location', primaryjoin='WaterwayReading.location_id == Location.id', backref='waterway_readings')
 
+
+    @staticmethod
+    def min_sample_date():
+        return db.session.query(
+            db.func.min(WaterwayReading.sample_date)
+        ).scalar()
+
+    @staticmethod
+    def max_sample_date():
+        return db.session.query(
+            db.func.max(WaterwayReading.sample_date)
+        ).scalar()
 
 
 class WaterwayReadingMaster(db.Model):
