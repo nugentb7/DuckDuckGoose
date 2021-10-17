@@ -1,3 +1,8 @@
+window.onload = function() {
+    var elements = document.querySelectorAll( '.report-img' );
+    Intense( elements );
+}
+
 var mymap = L.map("map").setView([0, 0], 13);
 
 let rasterBounds = [
@@ -63,10 +68,10 @@ $.get(
                     iconAnchor: [0, 10],
                 });
 
-
                 let marker = L.marker(
                     icon["latlng"], { "icon" : thisIcon }
                 );
+                
                 marker.bindTooltip(
                     feature["properties"]["display"], {
                         permanent: true, className: "location-label", direction: "top", offset: [12, 0]
@@ -107,9 +112,55 @@ $("#measure-search").select2({
     "ajax": {
         "url": "/rest/measure"
     },
-    "theme": "bootstrap"
+    "theme": "bootstrap", 
+    "maximumSelectionLength": 2
 });
 
 $("#sensor-search").select2({
+    "maximumSelectionLength": 2, 
     "theme": "bootstrap"
+});
+
+$("#chart-type").select2({
+    "theme": "bootstrap"
+});
+
+$("#generate").click(function() {
+    let chartType = $("#chart-type").val();
+
+    let measures = [];
+    $.each($("#measure-search").val(), function(i, val) {
+        measures.push(val);
+    });
+
+    let locations = [];
+    $.each($("#sensor-search").val(), function(i, val) {
+        locations.push(val);
+    });
+
+    $.ajax({
+        type: "POST", 
+        url: "/chart",
+        data: {
+            "locations" : JSON.stringify(locations),
+            "measures"  : JSON.stringify(measures), 
+            "chart_type": chartType,
+            "start_date": $("#start-date").val(),
+            "end_date": $("#end-date").val()
+        },
+        beforeSend: function() {
+            $("#report-img").attr("src", "");
+            $("#generate").prop("disabled", true);
+        }, 
+        success: function(data) {
+            bootbox.alert("Success");
+            $("#report-img").attr("src", data["uri"]);
+        }, 
+        error: function(xhr, status, error) {
+            bootbox.alert(JSON.parse(xhr.responseText).message);
+        },
+        complete: function() {
+            $("#generate").prop("disabled", false);
+        }
+    });
 });

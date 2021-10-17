@@ -5,6 +5,8 @@ services:
     build: .
     environment:
       TZ: "America/New_York"
+    env_file:
+      - .env
     expose:
       - "80"
     ports:

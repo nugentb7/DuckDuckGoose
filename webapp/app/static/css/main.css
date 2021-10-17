@@ -20,3 +20,12 @@
 .leaflet-tooltip-right:before {
     border: none !important;
 }
+
+#report-img {
+    max-height: 100%;
+    max-width: 100%;
+}
+
+#report-img:hover {
+    cursor: zoom-in;
+}

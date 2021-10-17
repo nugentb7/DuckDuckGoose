@@ -13,8 +13,8 @@ ADD requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY ./app /app
-RUN chmod -R 664 /app/static
-RUN chmod -R a+X /app/static
+RUN mkdir -p /viz
+RUN mkdir -p /viz/scatterplot
 
 EXPOSE 80
 HEALTHCHECK --interval=2m --timeout=3s CMD curl -f http://127.0.0.1/ || exit 1
