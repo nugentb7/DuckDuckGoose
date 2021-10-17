@@ -35,12 +35,26 @@ class Chemical(Base):
     unit_of_measure = relationship("UnitOfMeasure", backref="chemicals")
 
 
+class LocationType(Base):
+    __tablename__ = "location_type"
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="Unique, serial ID.")
+    name = Column(String(100), unique=True, comment="Location type name.")
+    description = Column(String(100), comment="Description of the location type.")
+
+
+
 class Location(Base):
     __tablename__ = "location"
 
     id = Column(Integer, primary_key=True, autoincrement=True, comment="Unique, serial ID.")
     name = Column(String(100), nullable=False, comment="The name of the location.", unique=True)
     display = Column(String(100), nullable=False, comment="The display string for this location.")
+    longitude = Column(Numeric, nullable=False, comment="Longitude (x) coordinate.")
+    latitude = Column(Numeric, nullable=False, comment="Latitude (y) coordinate.")
+    location_type_id = Column(Integer, ForeignKey("location_type.id"), comment="Foreign key referense to the location type.")
+
+    location_type = relationship("LocationType", backref="locations")
+
 
 
 class WaterwayReading(Base):
