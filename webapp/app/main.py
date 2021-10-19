@@ -26,7 +26,7 @@ def index():
         sensors=Location.all_sensors(),
         min_date=WaterwayReading.min_sample_date(),
         max_date=WaterwayReading.max_sample_date(),
-        chart_types=[{"id": "scatterplot", "display": "Scatterplot"}]
+        chart_types=Plotter.chart_types()
     )
 
 @app.route("/rest/location/<int:id>", methods=["GET"])
