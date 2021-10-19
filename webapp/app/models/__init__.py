@@ -23,6 +23,12 @@ max_plots = 5
 class Plotter(object):
 
     @staticmethod
+    def chart_types():
+        return [
+            {"id": "scatterplot", "display": "Scatterplot"},
+        ]
+
+    @staticmethod
     def call(*args, **kwargs):
         verb = request.method.lower()
         if hasattr(Plotter, verb):
@@ -74,23 +80,46 @@ class Plotter(object):
 
 
     @staticmethod
+    def transform_input(**kwargs):
+        input_args = kwargs
+
+        exclude = kwargs.pop("exclude", [])
+        if exclude:
+            for arg in exclude:
+                input_args.pop(arg, None)
+        out_args = {}
+
+        if "measures" not in exclude:
+            measures = ast.literal_eval(kwargs.get("measures"))
+            out_args["measures"] = Chemical.query.filter(Chemical.id.in_(measures)).all()
+        if "locations" not in exclude:
+            locations = ast.literal_eval(kwargs.get("locations"))
+            out_args["locations"] = Location.query.filter(Location.id.in_(locations)).all()
+
+        if "start_date" not in exclude:
+            start_date = kwargs.get("start_date")
+            if not start_date:
+                start_date = datetime.datetime(1998, 1, 1)
+            else:
+                start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+            out_args["start_date"] = start_date
+        if "end_date" not in exclude:
+            end_date = kwargs.get("end_date")
+            if not end_date:
+                end_date = datetime.datetime.now()
+            else:
+                end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+            out_args["end_date"] = end_date
+        return out_args
+
+
+    @staticmethod
     def scatterplot(**kwargs):
-        measures = ast.literal_eval(kwargs.get("measures"))
-        locations = ast.literal_eval(kwargs.get("locations"))
+        kwargs = Plotter.transform_input(**kwargs)
+        measure_objects = kwargs.get("measures")
+        location_objects = kwargs.get("locations")
         start_date = kwargs.get("start_date")
         end_date = kwargs.get("end_date")
-
-        if not start_date:
-            start_date = datetime.datetime(1998, 1, 1)
-        else:
-            start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
-        if not end_date:
-            end_date = datetime.datetime.now()
-        else:
-            end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
-
-        measure_objects = Chemical.query.filter(Chemical.id.in_(measures)).all()
-        location_objects = Location.query.filter(Location.id.in_(locations)).all()
 
         if not measure_objects:
             return {"message": "Invalid measure inputs."}, 401
