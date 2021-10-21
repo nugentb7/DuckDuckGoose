@@ -5,9 +5,10 @@ import csv
 import logging
 import chardet
 import datetime
+import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import UnitOfMeasure, Chemical, Location, WaterwayReading
+from models import UnitOfMeasure, Chemical, Location, WaterwayReading, LocationType
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -71,6 +72,37 @@ def units_and_chemicals(session):
 
 
 def locations_and_readings(session):
+
+    lt_waste = LocationType(
+        name="WASTE",
+        description="Waste dumping location"
+    )
+
+    lt_sensor = LocationType(
+        name="SENSOR",
+        description="Sensor location"
+    )
+
+    session.add(lt_waste)
+    session.add(lt_sensor)
+    session.flush()
+
+    file_text = (_csv_dir / "location-coordinates.json").read_text()
+    coordinates = json.loads(file_text)
+
+    # set up waste loc
+    session.add(
+        Location(
+            name="WASTE",
+            display="Kasios Waste Dump",
+            location_type=lt_waste,
+            longitude=coordinates["DUMP"]["x"],
+            latitude=coordinates["DUMP"]["y"]
+        )
+    )
+    session.flush()
+
+
     with open(_csv_dir / "waterway-readings.csv", "r") as csv_file:
         reader = csv.DictReader(csv_file, fieldnames=["id", "value", "location", "date", "measure"])
         next(reader)  # skip the header
@@ -78,13 +110,18 @@ def locations_and_readings(session):
         for row in reader:
             location_display = row["location"].strip()
             location_name = location_display.upper()
+            long = coordinates[location_name]["x"]
+            lat = coordinates[location_name]["y"]
 
             # create location, if needed
             location = session.query(Location).filter_by(name=location_name).first()
             if not location:
                 location = Location(
                     name=location_name, 
-                    display=location_display
+                    display=location_display, 
+                    location_type=lt_sensor, 
+                    longitude=long,
+                    latitude=lat
                 )
                 session.add(location)
                 session.flush()

@@ -2,9 +2,12 @@
 import argparse
 import pathlib
 from sqlalchemy import create_engine
+import sqlalchemy
+from sqlalchemy.engine import base
 from models import Base
 
-_default_db = pathlib.Path(__file__).resolve().parent / "waterways.db"
+_parent = pathlib.Path(__file__).resolve().parent
+_default_db = _parent / "waterways.db"
 
 
 def with_args(f):
@@ -21,22 +24,22 @@ def main(cmd_line):
     engine = create_engine(f"sqlite:///{cmd_line.database_path}")
     if cmd_line.delete:
         Base.metadata.drop_all(bind=engine)
-        engine.execute("drop view waterway_reading_master")
+        for view in (_parent / "views").iterdir():
+            try:
+                engine.execute(
+                    f"drop view {view.stem.replace('-', '_')}"
+                )
+            except sqlalchemy.exc.OperationalError:
+                pass
     else:
         Base.metadata.create_all(bind=engine)
-        engine.execute("""
-            create view waterway_reading_master as 
-            select ww.id
-                 , ww.value 
-                 , um.unit_name
-                 , cm.display as chemical
-                 , l.display as location
-                 , ww.sample_date
-            from waterway_reading ww 
-            left join location l on ww.location_id = l.id
-            left join chemical cm on ww.chemical_id = cm.id
-            left join unit_of_measure um on cm.unit_of_measure_id = um.id
-        """)
+        base_view = _parent / "views" / "waterway-reading-master.sql"
+        engine.execute(base_view.read_text())
+        for view in (_parent / "views").iterdir():
+            if view.name != base_view.name:
+                engine.execute(
+                    view.read_text()
+                )
 
 
 if __name__ == "__main__":

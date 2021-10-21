@@ -1,0 +1,31 @@
+
+#map { 
+    width: 100%;
+    height: 850px;
+}
+
+
+.leaflet-tooltip.location-label {
+    background-color: transparent;
+    border: transparent;
+    box-shadow: none;
+    color: #00ffdf;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+.leaflet-tooltip-top:before, 
+.leaflet-tooltip-bottom:before, 
+.leaflet-tooltip-left:before, 
+.leaflet-tooltip-right:before {
+    border: none !important;
+}
+
+#report-img {
+    max-height: 100%;
+    max-width: 100%;
+}
+
+#report-img:hover {
+    cursor: zoom-in;
+}

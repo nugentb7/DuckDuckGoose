@@ -1,6 +1,7 @@
 # random stuff
 .DS_Store
 .env
+.vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
