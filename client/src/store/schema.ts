@@ -1,3 +1,7 @@
 import { schema } from "normalizr";
 
-export const SCHEMAS = {};
+const readingSchema = new schema.Entity("reading", {});
+
+export const SCHEMAS = {
+  READING: readingSchema,
+};
