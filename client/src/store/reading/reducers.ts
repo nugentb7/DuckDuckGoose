@@ -1,4 +1,5 @@
 import { REQUEST_READINGS_SUCCESS, RequestReadingsAction } from './index';
+import { RootState } from '../index';
 
 const InitialReadingsState = {};
 export function readingsReducer(state: any = InitialReadingsState, action: RequestReadingsAction) {
@@ -9,10 +10,13 @@ export function readingsReducer(state: any = InitialReadingsState, action: Reque
                 isFetching: true,
             };
         case REQUEST_READINGS_SUCCESS:
-            if (action.response.entities.readings) {
+            if (action.response.entities.reading) {
                 return {
                     ...state,
-                    readings: {},
+                    entities: {
+                        ...state?.readings?.entities,
+                        ...action.response.entities.reading,
+                    },
                     isFetching: false,
                 };
             } else {

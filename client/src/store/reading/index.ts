@@ -53,7 +53,7 @@ export interface RequestReadingsSuccess {
     type: REQUEST_READINGS_SUCCESS;
     response: {
         entities: {
-            readings?: Record<number, Reading>;
+            reading?: Record<number, Reading>;
         };
     };
 }
