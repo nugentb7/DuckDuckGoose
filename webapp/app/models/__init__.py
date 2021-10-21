@@ -5,8 +5,10 @@ import os
 import datetime
 import ast
 import random
+import numpy as np
 from io import BytesIO
 from matplotlib import pyplot
+from matplotlib import dates as mdates
 from operator import or_
 from flask_sqlalchemy import SQLAlchemy
 from flask import request, url_for, send_file
@@ -69,6 +71,82 @@ class Plotter(object):
                 return getattr(Plotter, chart_type)(**dict(request.form))
             else: 
                 return {"message": "Not found."}, 401
+
+
+    @staticmethod
+    def line_chart(**kwargs):
+        kwargs = Plotter.transform_input(**kwargs)
+        measure_objects = kwargs.get("measures")
+        location_objects = kwargs.get("locations")
+        start_date = kwargs.get("start_date")
+        end_date = kwargs.get("end_date")
+        if not measure_objects:
+            return {"message": "Invalid measure inputs."}, 401
+        if not location_objects:
+            return {"message": "Invalid location inputs."}, 401
+        if len(set([m.unit_of_measure.id for m in measure_objects])) > 1:
+            return {"message": "You must choose measures with the same unit of measurement."}, 401
+        colors = ["blue", "green", "orange", "red"]
+        i = 0
+        title_string = []
+        location_strings = set()
+        pyplot.rc('font', size=12)
+        fig, ax = pyplot.subplots(figsize=(10, 6))
+        for measure in measure_objects:        
+            title_string.append(measure.display)
+            for location in location_objects:
+
+                query = db.session.query(
+                    db.distinct(db.func.date(WaterwayReading.sample_date).label("sample_date")), 
+                    db.func.avg(WaterwayReading.value).label("value")
+                ).join(
+                    Chemical, Chemical.id == WaterwayReading.chemical_id
+                ).join(
+                    Location, Location.id == WaterwayReading.location_id
+                ).group_by(
+                    Location.id, 
+                    Chemical.id, 
+                    db.func.date(WaterwayReading.sample_date)
+                ).filter(
+                    Chemical.id == measure.id, 
+                    Location.id == location.id, 
+                )
+
+                # query = db.session.query(
+                #     WaterwayReading.sample_date, 
+                #     WaterwayReading.value
+                # ).filter(
+                #     WaterwayReading.chemical == measure,
+                #     WaterwayReading.location == location, 
+                #     WaterwayReading.sample_date.between(start_date, end_date)
+                # )
+
+                location_strings.add(location.display)
+                results = query.all()
+                if results:
+                    sample_dates, values = zip(*results)
+                    ax.plot_date(sample_dates, values, fmt='H')
+                    # ax.setp(plt.gca().xaxis.get_majorticklabels(),
+                    #         'rotation', 90)
+                    ax.plot(sample_dates, values, color=f"tab:{colors[i]}", label=f"{location.display} - {measure.display}")
+
+                    i += 1
+        title_string = " and ".join(title_string) + " Over Time\n" + ", ".join(location_strings)
+        ax.set_xlabel("Sample Dates")
+        
+        sample_measurment = measure_objects[0]
+        ax.set_ylabel(f"Value ({sample_measurment.unit_of_measure})")
+        ax.set_title(title_string)
+        ax.grid(True)
+        # Shrink current axis's height by 10% on the bottom
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0 + box.height * 0.1,
+                        box.width, box.height * 0.9])
+        # Put a legend below current axis
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=5, prop={'size': 9})
+        Plotter.save_plot("line_chart")
+        return {"message": "Successfully created.", "uri": f"/chart/line_chart/latest?t={random.randint(1, 99999999)}"}, 201
+
 
     @staticmethod
     def save_plot(directory):
