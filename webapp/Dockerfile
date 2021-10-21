@@ -6,8 +6,9 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y \
     libaio1 \
-    tzdata 
-
+    tzdata \
+    libgeos-dev 
+    
 ## Install Python dependencies
 ADD requirements.txt .
 RUN pip install -r requirements.txt
