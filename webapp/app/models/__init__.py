@@ -26,6 +26,7 @@ class Plotter(object):
     def chart_types():
         return [
             {"id": "scatterplot", "display": "Scatterplot"},
+            {"id": "line_chart", "display": "Line Chart"}
         ]
 
     @staticmethod
@@ -201,6 +202,7 @@ class Chemical(db.Model):
                 )
             ).order_by(Chemical.name).all()
             return {"results": [{"id": r.id, "text": f"{r.display} ({str(r.unit_of_measure)})"} for r in results]}, 200
+
 
 
 class Location(db.Model):
