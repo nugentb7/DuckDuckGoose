@@ -31,10 +31,3 @@ export const rootReducer = combineReducers({
  * Root of state object, contains typing for the entire state tree.
  */
 export type RootState = ReturnType<typeof rootReducer>;
-
-/**
- * Initial value of state, as defined when the page loads BEFORE requests are made.
- */
-export const InitialState: RootState = {
-    readings: {},
-};

@@ -1,8 +1,12 @@
-import { REQUEST_READINGS_SUCCESS, RequestReadingsAction } from './index';
-import { RootState } from '../index';
+import { Reading, REQUEST_READINGS_SUCCESS, RequestReadingsAction } from './index';
+import { act } from 'react-dom/test-utils';
+
+interface ReadingsState {
+    entities: Map<number, Reading>;
+}
 
 const InitialReadingsState = {};
-export function readingsReducer(state: any = InitialReadingsState, action: RequestReadingsAction) {
+export function readingsReducer(state: any = InitialReadingsState, action: RequestReadingsAction): ReadingsState {
     switch (action.type) {
         case 'REQUEST_READINGS_STARTED':
             return {
@@ -11,6 +15,10 @@ export function readingsReducer(state: any = InitialReadingsState, action: Reque
             };
         case REQUEST_READINGS_SUCCESS:
             if (action.response.entities.reading) {
+                for (const reading of Object.values(action.response.entities.reading)) {
+                    reading.date = new Date(reading.date);
+                }
+
                 return {
                     ...state,
                     entities: {

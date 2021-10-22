@@ -25,9 +25,10 @@ export type Unit = 'mg/l' | 'µg/l' | 'C' | '';
  */
 export interface Reading {
     id: number;
+    value: number;
     location: Location;
-    date: number;
     measure: string;
+    date: Date;
     unit: Unit;
 }
 
