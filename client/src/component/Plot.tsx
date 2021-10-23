@@ -1,8 +1,11 @@
 import React from 'react';
-import { ViewRect } from '../types/ViewRect';
 
 interface ComponentState {
-    view: ViewRect;
+    view: {
+        x: number;
+        y: number;
+        zoom: number;
+    };
     pan?: {
         dx: number;
         dy: number;
@@ -17,26 +20,14 @@ type ComponentProps = {
         x?: number;
         y?: number;
     };
+    zoom?: {
+        max?: number;
+        min?: number;
+    };
 };
 
 export class Plot extends React.Component<ComponentProps, ComponentState> {
     protected viewboxRef: React.RefObject<SVGSVGElement>;
-
-    /**
-     * Current width of the viewbox, calculated from bounds.
-     * @protected
-     */
-    public get width(): number {
-        return this.state.view.y - this.state.view.x;
-    }
-
-    /**
-     * Current height of the viewbox, calculated from bounds.
-     * @protected
-     */
-    public get height(): number {
-        return this.state.view.h - this.state.view.w;
-    }
 
     public constructor(props: ComponentProps) {
         super(props);
@@ -47,8 +38,7 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
             view: {
                 x: 0,
                 y: 0,
-                w: 200,
-                h: 100,
+                zoom: 4,
             },
         };
     }
@@ -75,9 +65,8 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
 
     protected onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
         if (this.state.pan) {
-            const panFactor = (200 / this.state.view.w) * 5;
-            const x = this.state.view.x + (this.state.pan.dx - event.clientX) / panFactor;
-            const y = this.state.view.y + (this.state.pan.dy - event.clientY) / panFactor;
+            const x = this.state.view.x + (this.state.pan.dx - event.clientX);
+            const y = this.state.view.y + (this.state.pan.dy - event.clientY);
 
             this.setState({
                 view: {
@@ -94,24 +83,31 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
     };
 
     protected onWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-        event.stopPropagation();
+        const direction = event.deltaY / 100;
+        const maxZoom = this.props.zoom?.max ?? 10;
+        const minZoom = this.props.zoom?.min ?? 1;
 
-        let { w, h } = this.state.view;
-        let amount = event.deltaY / 1000;
+        let { zoom } = this.state.view;
+        zoom -= direction;
+        zoom = Math.min(zoom, maxZoom);
+        zoom = Math.max(zoom, minZoom);
 
         this.setState({
-            view: {
-                ...this.state.view,
-                w: w + w * amount,
-                h: h + h * amount,
-            },
+            view: { ...this.state.view, zoom },
         });
+
+        this.redraw();
     };
 
     protected renderAxisLines() {
         // TODO: Fix incorrect line drawing on odd aspect ratios.
         //  Need to somehow read the width of the element and convert it to SVG units.
-        let { x, y, w, h } = this.state.view;
+        let { x, y } = this.state.view;
+        let bounds = this.viewboxRef.current?.viewBox.animVal;
+
+        if (!bounds) {
+            return [];
+        }
 
         // desired increments for the lines
         const lrd = this.props.axisLines?.x; // left to right delta
@@ -122,13 +118,13 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
 
         if (lrd) {
             let rx = Math.floor(y / lrd) * lrd;
-            for (let dx = rx; dx < y + h; dx += lrd) {
+            for (let dx = rx; dx < y + bounds.height; dx += lrd) {
                 elements.push(
                     <line
                         key={`axline-${key++}`}
                         x1={x}
                         y1={dx}
-                        x2={x + w}
+                        x2={x + bounds.width}
                         y2={dx}
                         stroke={'black'}
                         strokeWidth={0.25}
@@ -151,14 +147,14 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
 
         if (tbd) {
             let ry = Math.floor(x / tbd) * tbd;
-            for (let dy = ry; dy < x + w; dy += tbd) {
+            for (let dy = ry; dy < x + bounds.width; dy += tbd) {
                 elements.push(
                     <line
                         key={`axline-${key++}`}
                         x1={dy}
                         y1={y}
                         x2={dy}
-                        y2={y + h}
+                        y2={y + bounds.height}
                         stroke={'black'}
                         strokeWidth={0.25}
                         opacity={0.25}
@@ -168,7 +164,7 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
                     <text
                         key={`axline-text-${key++}`}
                         x={dy}
-                        y={y + h}
+                        y={y + bounds.height}
                         fontSize={3}
                         style={{ pointerEvents: 'none', userSelect: 'none' }}
                     >
@@ -182,27 +178,31 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
     }
 
     public componentDidMount() {
-        const bounds = this.viewboxRef.current?.getBoundingClientRect();
-        if (bounds) {
-            this.setState({
-                ...this.state,
-                view: {
-                    ...this.state.view,
-                    w: bounds.width / 4,
-                    h: bounds.height / 4,
-                },
-            });
-        }
+        this.redraw();
+    }
+
+    public redraw() {
+        // TODO: Can we fix this so we don't need to render thrice to achieve accurate results?
+        // data needed for axline rendering is only(?) available after multiple renders
+        this.forceUpdate(() => this.forceUpdate());
     }
 
     render() {
-        const { x, w, y, h } = this.state.view;
+        const { x, y, zoom } = this.state.view;
+        const bounds = this.viewboxRef.current?.getBoundingClientRect();
+
+        if (bounds === undefined) {
+            return <svg ref={this.viewboxRef} width={'100%'} height={'400px'} />;
+        }
+
+        const w = bounds.width;
+        const h = bounds.height;
 
         return (
             <svg
                 width={'100%'}
                 height={'400px'}
-                viewBox={`${x} ${y} ${w} ${h}`}
+                viewBox={`${x} ${y} ${w / zoom} ${h / zoom}`}
                 ref={this.viewboxRef}
                 style={{ border: '2px solid black' }}
                 onPointerDown={this.onPointerDown}
