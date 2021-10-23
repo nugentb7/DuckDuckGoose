@@ -1,5 +1,4 @@
 import { Reading, REQUEST_READINGS_SUCCESS, RequestReadingsAction } from './index';
-import { act } from 'react-dom/test-utils';
 
 interface ReadingsState {
     entities: Map<number, Reading>;

@@ -1,7 +1,7 @@
 import { Container } from 'react-bootstrap';
 import { AppDispatch, RootState } from '../store';
 import { connect } from 'react-redux';
-import React, { SyntheticEvent } from 'react';
+import React from 'react';
 import CardHeader from 'react-bootstrap/CardHeader';
 import { Reading } from '../store/reading';
 import { Plot } from './Plot';

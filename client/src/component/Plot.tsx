@@ -1,7 +1,5 @@
 import React from 'react';
-import { ViewRect } from '../util/ViewRect';
-import { rgb } from 'd3';
-import { Line } from '../types/Line';
+import { ViewRect } from '../types/ViewRect';
 
 interface ComponentState {
     view: ViewRect;
@@ -77,7 +75,7 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
 
     protected onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
         if (this.state.pan) {
-            const panFactor = 5;
+            const panFactor = (200 / this.state.view.w) * 5;
             const x = this.state.view.x + (this.state.pan.dx - event.clientX) / panFactor;
             const y = this.state.view.y + (this.state.pan.dy - event.clientY) / panFactor;
 
@@ -99,7 +97,6 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
         event.stopPropagation();
 
         let { w, h } = this.state.view;
-
         let amount = event.deltaY / 1000;
 
         this.setState({
@@ -113,42 +110,89 @@ export class Plot extends React.Component<ComponentProps, ComponentState> {
 
     protected renderAxisLines() {
         // TODO: Fix incorrect line drawing on odd aspect ratios.
+        //  Need to somehow read the width of the element and convert it to SVG units.
         let { x, y, w, h } = this.state.view;
 
         // desired increments for the lines
-        const tx = this.props.axisLines?.x;
-        const ty = this.props.axisLines?.y;
+        const lrd = this.props.axisLines?.x; // left to right delta
+        const tbd = this.props.axisLines?.y; // top to bottom delta
 
-        const lines: Line[] = [];
+        let key: number = 0;
+        const elements: JSX.Element[] = [];
 
-        // note the lines are across the specified axis, so for x lines we look at y values
-        if (tx) {
-            let rx = Math.floor(y / tx) * tx;
-            for (let dx = rx; dx < y + h; dx += tx) {
-                lines.push({
-                    x1: x,
-                    y1: dx,
-                    x2: x + w,
-                    y2: dx,
-                });
+        if (lrd) {
+            let rx = Math.floor(y / lrd) * lrd;
+            for (let dx = rx; dx < y + h; dx += lrd) {
+                elements.push(
+                    <line
+                        key={`axline-${key++}`}
+                        x1={x}
+                        y1={dx}
+                        x2={x + w}
+                        y2={dx}
+                        stroke={'black'}
+                        strokeWidth={0.25}
+                        opacity={0.25}
+                    />
+                );
+                elements.push(
+                    <text
+                        key={`axline-text-${key++}`}
+                        x={x}
+                        y={dx}
+                        fontSize={3}
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >
+                        {dx.toFixed(2)}
+                    </text>
+                );
             }
         }
 
-        if (ty) {
-            let ry = Math.floor(x / ty) * ty;
-            for (let dy = ry; dy < x + w; dy += ty) {
-                lines.push({
-                    x1: dy,
-                    y1: y,
-                    x2: dy,
-                    y2: y + h,
-                });
+        if (tbd) {
+            let ry = Math.floor(x / tbd) * tbd;
+            for (let dy = ry; dy < x + w; dy += tbd) {
+                elements.push(
+                    <line
+                        key={`axline-${key++}`}
+                        x1={dy}
+                        y1={y}
+                        x2={dy}
+                        y2={y + h}
+                        stroke={'black'}
+                        strokeWidth={0.25}
+                        opacity={0.25}
+                    />
+                );
+                elements.push(
+                    <text
+                        key={`axline-text-${key++}`}
+                        x={dy}
+                        y={y + h}
+                        fontSize={3}
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    >
+                        {dy.toFixed(2)}
+                    </text>
+                );
             }
         }
 
-        return lines.map(({ x1, y1, x2, y2 }, index) => (
-            <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke={'rgba(0,0,0,0.25)'} strokeWidth={0.25} />
-        ));
+        return elements;
+    }
+
+    public componentDidMount() {
+        const bounds = this.viewboxRef.current?.getBoundingClientRect();
+        if (bounds) {
+            this.setState({
+                ...this.state,
+                view: {
+                    ...this.state.view,
+                    w: bounds.width / 4,
+                    h: bounds.height / 4,
+                },
+            });
+        }
     }
 
     render() {
