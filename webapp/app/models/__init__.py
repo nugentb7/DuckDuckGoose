@@ -15,6 +15,8 @@ from flask import request, url_for, send_file
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import or_, func
 from sqlalchemy.sql.operators import endswith_op
+import plotly.express as px
+
 
 
 db = SQLAlchemy()
@@ -128,11 +130,12 @@ class Plotter(object):
                     ax.plot_date(sample_dates, values, fmt='H')
                     # ax.setp(plt.gca().xaxis.get_majorticklabels(),
                     #         'rotation', 90)
-                    ax.plot(sample_dates, values, color=f"tab:{colors[i]}", label=f"{location.display} - {measure.display}")
+                    # ax.plot(sample_dates, values, color=f"tab:{colors[i]}", label=f"{location.display} - {measure.display}")
 
                     i += 1
         title_string = " and ".join(title_string) + " Over Time\n" + ", ".join(location_strings)
         ax.set_xlabel("Sample Dates")
+        
         
         sample_measurment = measure_objects[0]
         ax.set_ylabel(f"Value ({sample_measurment.unit_of_measure})")
@@ -265,6 +268,27 @@ class Chemical(db.Model):
 
     unit_of_measure = db.relationship('UnitOfMeasure', primaryjoin='Chemical.unit_of_measure_id == UnitOfMeasure.id', backref='chemicals')
 
+    @property
+    def json(self):
+        return {
+            "id": int(self.id),
+            "name": self.name, 
+            "display": self.display,
+            "unit": str(self.unit_of_measure.unit_name.decode()), 
+            "uri": f"/rest/measure/{self.id}"
+        }
+
+    @staticmethod
+    def get(id):
+        if not id:
+            return {"message": "Not found"}, 404
+        else:
+            result = Chemical.query.filter_by(id=id).first()
+            if result:
+                return result.json, 200
+            else:
+                return {"message": "Measure not found."}, 404
+
 
     @staticmethod
     def search():
@@ -336,8 +360,10 @@ class Location(db.Model):
                 "display": self.display,
                 "type": {
                     "id": self.location_type.id,
-                    "name": self.location_type.name
-                } 
+                    "name": self.location_type.name, 
+                    "description": self.location_type.description
+                }, 
+                "uri": f"/rest/location/{int(self.id)}" 
             }, 
             "geometry": { 
                 "type": "Point", 
@@ -353,6 +379,9 @@ class Location(db.Model):
             } 
         }
     
+    @property
+    def json(self):
+        return self.geojson
 
     @staticmethod
     def all_locations_geojson(include_waste=True):
@@ -393,6 +422,10 @@ class UnitOfMeasure(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_name = db.Column(db.String(10), unique=True)
 
+    @property
+    def decoded(self):
+        return str(self.unit_name.decode())
+
     def __str__(self):
         return self.unit_name.decode()
 
@@ -413,6 +446,17 @@ class WaterwayReading(db.Model):
     location = db.relationship('Location', primaryjoin='WaterwayReading.location_id == Location.id', backref='waterway_readings')
 
 
+    @property 
+    def json(self):
+        return {
+            "id": int(self.id), 
+            "value": float(self.value),
+            "sample_date": self.sample_date.strftime("%Y-%m-%d"),
+            "location": self.location.json, 
+            "measure": self.chemical.json
+        }
+
+
     @staticmethod
     def min_sample_date():
         return db.session.query(
@@ -424,6 +468,74 @@ class WaterwayReading(db.Model):
         return db.session.query(
             db.func.max(WaterwayReading.sample_date)
         ).scalar()
+
+    @staticmethod
+    def search():
+        args = dict(request.args)
+        args = WaterwayReading.transform_input(**args)
+        
+        location_ids = [loc.id for loc in args["locations"]]
+        measure_ids = [ms.id for ms in args["measures"]]
+        query = WaterwayReading.query.filter(
+            db.between(
+                WaterwayReading.sample_date,
+                args["start_date"],
+                args["end_date"]
+            )
+        )
+
+        if location_ids:
+            query = query.filter(WaterwayReading.location_id.in_(location_ids))
+        if measure_ids:
+            query = query.filter(WaterwayReading.chemical_id.in_(measure_ids))
+
+        data = query.all()
+
+        if data:
+            response = {"results": [row.json for row in data], "message": "Ok."}, 200
+        else:
+            response = {"results": [], "message": "None found."}, 200
+        return response
+
+
+    @staticmethod
+    def transform_input(**kwargs):
+        input_args = kwargs
+
+        exclude = kwargs.pop("exclude", [])
+        if exclude:
+            for arg in exclude:
+                input_args.pop(arg, None)
+        out_args = {}
+
+        if "measures" not in exclude and kwargs.get("measures"):
+            measures = ast.literal_eval(kwargs.get("measures"))
+            out_args["measures"] = Chemical.query.filter(Chemical.id.in_(measures)).all()
+        else: 
+            out_args["measures"] = []
+
+        if "locations" not in exclude and kwargs.get("locations"):
+            locations = ast.literal_eval(kwargs.get("locations"))
+            out_args["locations"] = Location.query.filter(Location.id.in_(locations)).all()
+        else: 
+            out_args["locations"] = []
+
+        if "start_date" not in exclude:
+            start_date = kwargs.get("start_date")
+            if not start_date:
+                start_date = datetime.datetime(1998, 1, 1)
+            else:
+                start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+            out_args["start_date"] = start_date
+        if "end_date" not in exclude:
+            end_date = kwargs.get("end_date")
+            if not end_date:
+                end_date = datetime.datetime.now()
+            else:
+                end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+            out_args["end_date"] = end_date
+        return out_args
+
 
 
 class WaterwayReadingMaster(db.Model):

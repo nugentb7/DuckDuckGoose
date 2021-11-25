@@ -27,6 +27,7 @@ let bounds;
 let wasteLayer;
 let sensorLayer;
 let maxZoom;
+let rivers, lakes;
 
 let imageUrl = "/static/images/waterways_map.jpg",
     imageBounds = rasterBounds;
@@ -51,6 +52,7 @@ let layerControl = L.control.layers(
     {},
     { "collapsed" : false }
 ).addTo(mymap);
+
 
 $.get(
     "/rest/locations/", 
@@ -91,11 +93,11 @@ $.get(
             }                
         });
 
-        bounds = points.getBounds();
-        mymap.fitBounds(bounds);
-        mymap.setMaxBounds(bounds.pad(1));
+        // bounds = points.getBounds();
+        // mymap.fitBounds(bounds);
+        // mymap.setMaxBounds(bounds.pad(1));
         
-        mymap.setMinZoom(mymap.getZoom());
+        // mymap.setMinZoom(mymap.getZoom());
 
     }
 ).done(function() {
@@ -106,11 +108,36 @@ $.get(
     layerControl.addOverlay(sensorLayer, "Sensors");
     layerControl.addOverlay(wasteLayer, "Kasios Dumping Location");
     layerControl.addOverlay(ogMap, "Original Map");
+    $.get(
+        "/static/data/lakes.geojson", 
+        function(data) {
+            lakes = L.geoJSON(data, {});
+            lakes.setStyle({"fillColor":"blue", "fillOpacity": 1, "color": "blue", "weight": 1});
+        }
+    ).done(function() {
+        lakes.addTo(mymap);
+        layerControl.addOverlay(lakes, "Lakes");
+        $.get(
+            "/static/data/rivers.geojson", 
+            function(data) {
+                rivers = L.geoJSON(data, {});
+                rivers.setStyle({"weight": 2, "color": "blue"});
+            }
+        ).done(function() {
+            rivers.addTo(mymap);
+            layerControl.addOverlay(rivers, "Rivers");
+            bounds = rivers.getBounds();
+            mymap.fitBounds(bounds);
+            mymap.setMaxBounds(bounds.pad(1));
+            
+            mymap.setMinZoom(mymap.getZoom());
+        });
+    });
 });
 
 $("#measure-search").select2({
     "ajax": {
-        "url": "/rest/measure"
+        "url": "/rest/measures"
     },
     "theme": "bootstrap", 
     "maximumSelectionLength": 2
@@ -124,6 +151,7 @@ $("#sensor-search").select2({
 $("#chart-type").select2({
     "theme": "bootstrap"
 });
+
 
 $("#generate").click(function() {
     let chartType = $("#chart-type").val();
@@ -164,3 +192,4 @@ $("#generate").click(function() {
         }
     });
 });
+

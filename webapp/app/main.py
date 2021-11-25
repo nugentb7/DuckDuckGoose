@@ -40,9 +40,25 @@ def location(id=None):
 def chart(chart_type=None):
     return Plotter.call(chart_type=chart_type)
     
-@app.route("/rest/measure", methods=["GET"])
-def measure():
-    return Chemical.search()
+@app.route("/rest/measures", methods=["GET"])
+@app.route("/rest/measure/<id>")
+def measure(id=None):
+    return Chemical.search() if not id else Chemical.get(id)
+
+@app.route("/rest/readings", methods=["GET"])
+def readings():
+    return WaterwayReading.search()
+
+@app.route("/viz")
+def viz():
+    return render_template(
+        "charts.html",        
+        sensors=Location.all_sensors(),
+        measures=Chemical.query.all(),
+        min_date=WaterwayReading.min_sample_date(),
+        max_date=WaterwayReading.max_sample_date(),
+        chart_types=Plotter.chart_types()
+    )
 
 
 if __name__ == "__main__":
