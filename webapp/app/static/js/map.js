@@ -99,7 +99,7 @@ $.get(
     $.get(
         "/static/data/lakes.geojson", 
         function(data) {
-            lakes = L.geoJSON(data, {});
+            lakes = L.geoJSON(JSON.parse(data), {});
             lakes.setStyle({"fillColor":"blue", "fillOpacity": 1, "color": "blue", "weight": 1});
         }
     ).done(function() {
@@ -108,7 +108,7 @@ $.get(
         $.get(
             "/static/data/rivers.geojson", 
             function(data) {
-                rivers = L.geoJSON(data, {});
+                rivers = L.geoJSON(JSON.parse(data), {});
                 rivers.setStyle({"weight": 2, "color": "blue"});
             }
         ).done(function() {
