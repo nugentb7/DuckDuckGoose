@@ -80,25 +80,13 @@ $.get(
                     }
                 );
 
-                marker.bindPopup(
-                    "<span>Some stuff about <b>"+feature["properties"]["display"]+"</b></span>"
-                );
                 if (feature["properties"]["type"]["name"] === "WASTE") {
                     wasteMarkers.push(marker);
                 } else {
                     sensorMarkers.push(marker);
-                }
-                
-                //marker.addTo(mymap);
+                }                
             }                
         });
-
-        // bounds = points.getBounds();
-        // mymap.fitBounds(bounds);
-        // mymap.setMaxBounds(bounds.pad(1));
-        
-        // mymap.setMinZoom(mymap.getZoom());
-
     }
 ).done(function() {
     sensorLayer = L.layerGroup(sensorMarkers);
@@ -139,18 +127,27 @@ $("#measure-search").select2({
     "ajax": {
         "url": "/rest/measures"
     },
-    "theme": "bootstrap", 
-    "maximumSelectionLength": 2
+    "theme": "bootstrap"
 });
 
 $("#sensor-search").select2({
-    "maximumSelectionLength": 2, 
     "theme": "bootstrap"
 });
+
 
 $("#chart-type").select2({
     "theme": "bootstrap"
 });
+
+$("select").on("select2:select", function (evt) {
+    var element = evt.params.data.element;
+    var $element = $(element);
+
+    $element.detach();
+    $(this).append($element);
+    $(this).trigger("change");
+});
+
 
 
 $("#generate").click(function() {
@@ -174,7 +171,8 @@ $("#generate").click(function() {
             "measures"  : JSON.stringify(measures), 
             "chart_type": chartType,
             "start_date": $("#start-date").val(),
-            "end_date": $("#end-date").val()
+            "end_date": $("#end-date").val(),
+            "condenser": $("#condenser").is(":checked") ? 1 : ""
         },
         beforeSend: function() {
             $("#report-img").attr("src", "");
@@ -182,7 +180,8 @@ $("#generate").click(function() {
         }, 
         success: function(data) {
             bootbox.alert("Success");
-            $("#report-img").attr("src", data["uri"]);
+            $("#chart").empty();
+            $("#chart").html(data);
         }, 
         error: function(xhr, status, error) {
             bootbox.alert(JSON.parse(xhr.responseText).message);

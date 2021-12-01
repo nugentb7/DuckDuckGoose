@@ -11,3 +11,5 @@ services:
       - "80"
     ports:
       - "5000:80"
+    volumes:
+      - ./app/:/app

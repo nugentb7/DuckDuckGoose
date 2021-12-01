@@ -29,6 +29,11 @@ def index():
         chart_types=Plotter.chart_types()
     )
 
+
+@app.route("/chart/current", methods=["GET"])
+def current_chart():
+    return Plotter.get_current_chart()
+
 @app.route("/rest/location/<int:id>", methods=["GET"])
 @app.route("/rest/location/name/<string:id>")
 @app.route("/rest/locations/", methods=["GET"])
@@ -36,7 +41,6 @@ def location(id=None):
     return Location.get(id)
 
 @app.route("/chart", methods=["POST"])
-@app.route("/chart/<chart_type>/latest", methods=["GET"])
 def chart(chart_type=None):
     return Plotter.call(chart_type=chart_type)
     
