@@ -378,12 +378,6 @@ class Location(db.Model):
         return {
             "type": "FeatureCollection",
             "name": "sensor-locations",
-            "crs": { 
-                "type": "name", 
-                "properties": { 
-                    "name": "urn:ogc:def:crs:OGC:1.3:CRS84" 
-                } 
-            },
             "features": features
         }
     
