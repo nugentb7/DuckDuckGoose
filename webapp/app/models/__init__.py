@@ -201,12 +201,12 @@ class Plotter(object):
             in_kwargs["y"] = "location"
             in_kwargs["size"] = "value" 
             in_kwargs["size_max"] = 80
-            in_kwargs["color"] = "location"
+            in_kwargs["color"] = "measure"
             in_kwargs.pop("facet_col", None)
             in_kwargs.pop("facet_row", None)
             
-            if len(data["measures"]) > 1:
-                return {"message": "You can only use one measure for this chart type."}, 400
+            # if len(data["measures"]) > 1:
+            #     return {"message": "You can only use one measure for this chart type."}, 400
              
         
         if ct == "histogram":
