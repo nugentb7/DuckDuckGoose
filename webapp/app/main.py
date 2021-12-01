@@ -3,7 +3,7 @@ import logging
 import os
 from flask_socketio import SocketIO, emit
 from flask import Flask, render_template, session
-from models import db, Location, Chemical, WaterwayReading, Plotter
+from .models import db, Location, Chemical, WaterwayReading, Plotter
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///waterways.db"
