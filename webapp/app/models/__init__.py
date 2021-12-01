@@ -193,7 +193,7 @@ class Plotter(object):
             y="value", 
             facet_col="location",
             facet_row="measure", 
-            height=900,
+            height=800,
             width=1000, 
         )
         
