@@ -5,14 +5,20 @@ import os
 import datetime
 import ast
 import random
+import numpy as np
+import pandas
+import plotly.express as px
+import plotly.offline.offline as poff
 from io import BytesIO
 from matplotlib import pyplot
+from matplotlib import dates as mdates
 from operator import or_
 from flask_sqlalchemy import SQLAlchemy
-from flask import request, url_for, send_file
+from flask import request, url_for, send_file, make_response
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import or_, func
 from sqlalchemy.sql.operators import endswith_op
+
 
 
 db = SQLAlchemy()
@@ -23,10 +29,24 @@ max_plots = 5
 class Plotter(object):
 
     @staticmethod
+    def get_current_chart():
+        path = viz_dir / "chart"
+        if os.path.isfile(str(path / "current.html")):
+            out = str(path / "current.html")
+        else: 
+            out = str(path / "blank-chart.html")
+        with open(out, "r") as f:
+            response = make_response(f.read())
+            response.mimetype = "text/html"
+            return response
+
+    @staticmethod
     def chart_types():
         return [
-            {"id": "scatterplot", "display": "Scatterplot"},
-            {"id": "line_chart", "display": "Line Chart"}
+            {"id": "scatter", "display": "Scatterplot"},
+            {"id": "grad_scatter", "display": "Bubble Chart (only one measure)"},
+            {"id": "bar", "display": "Bar Chart"},
+            {"id": "histogram", "display": "Histogram"},
         ]
 
     @staticmethod
@@ -37,38 +57,62 @@ class Plotter(object):
         else:
             return {"message": "Method not allowed."}, 405
 
+
     @staticmethod
-    def get(chart_type=None):
-        if request.path.endswith("latest"):
-            path = str(viz_dir / chart_type)
-            files = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-            logger.info(files)
-            if files:
-                files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                newest = files[0]
-                with open(newest, "rb") as f_bytes:
-                    return send_file(
-                        BytesIO(f_bytes.read()),
-                        mimetype="image/png",
-                        as_attachment=True,
-                        attachment_filename=f"{chart_type}.png"
+    def retrieve_data(**kwargs):
+        kwargs = Plotter.transform_input(**kwargs)
+        measure_objects = kwargs.get("measures")
+        location_objects = kwargs.get("locations")
+        start_date = kwargs.get("start_date")
+        end_date = kwargs.get("end_date")
+
+        frames = []
+        for i, measure in enumerate(measure_objects):
+            for j, location in enumerate(location_objects):
+                query = db.session.query(
+                    WaterwayReading.id,
+                    Location.display.label("location"),
+                    Location.longitude,
+                    Location.latitude,
+                    WaterwayReading.sample_date.label("sample_date"), 
+                    WaterwayReading.value.label("value"),
+                    Chemical.display + "(" + UnitOfMeasure.unit_name + ")",
+                    UnitOfMeasure.unit_name.label("unit"),
+                ).join(
+                    Chemical, WaterwayReading.chemical_id == Chemical.id
+                ).join(
+                    Location, WaterwayReading.location_id == Location.id
+                ).join(
+                    UnitOfMeasure, Chemical.unit_of_measure_id == UnitOfMeasure.id
+                ).filter(
+                    WaterwayReading.sample_date.between(start_date, end_date)
+                )
+                if location:
+                    query = query.filter(WaterwayReading.location == location)
+                if measure:
+                    query = query.filter(WaterwayReading.chemical == measure)
+                frames.append(
+                    pandas.read_sql(
+                        query.statement.compile(compile_kwargs={"literal_binds": True}),
+                        db.session.bind
                     )
-            else: 
-                return {"message": "Not found."}, 404
-        else:
-            return {"message": "Not supported."}, 400
-
-
+                )                
+        df = pandas.concat(frames)
+        df.columns = ["id", "location", "longitude", "latitude", "sample_date", "value", "measure", "unit"]
+        return {
+            "dataframe": df, 
+            "locations": location_objects,
+            "measures": measure_objects
+        }
+                        
     @staticmethod
     def post(*args, **kwargs):
         chart_type = request.form.get("chart_type")
         if not chart_type:
             return {"message": "You must specify a chart type."}, 401
         else:
-            if hasattr(Plotter, chart_type):                
-                return getattr(Plotter, chart_type)(**dict(request.form))
-            else: 
-                return {"message": "Not found."}, 401
+            return Plotter.plot(**dict(request.form))
+
 
     @staticmethod
     def save_plot(directory):
@@ -92,10 +136,28 @@ class Plotter(object):
 
         if "measures" not in exclude:
             measures = ast.literal_eval(kwargs.get("measures"))
-            out_args["measures"] = Chemical.query.filter(Chemical.id.in_(measures)).all()
+            measure_obj_list = []
+            for m in measures:
+                measure_obj_list.append(
+                    Chemical.query.filter(Chemical.id == m).first()   
+                )
+            if not measure_obj_list:
+                out_args["measures"] = Chemical.query.all()
+            else:    
+                out_args["measures"] = measure_obj_list
+                
         if "locations" not in exclude:
             locations = ast.literal_eval(kwargs.get("locations"))
-            out_args["locations"] = Location.query.filter(Location.id.in_(locations)).all()
+            location_obj_list = []
+            for l in locations:
+                location_obj_list.append(
+                    Location.query.filter(Location.id == l).first()   
+                )
+            
+            if not location_obj_list or kwargs.get("chart_type") == "density_heatmap":
+                out_args["locations"] = Location.query.all()
+            else:
+                out_args["locations"] = location_obj_list
 
         if "start_date" not in exclude:
             start_date = kwargs.get("start_date")
@@ -115,65 +177,66 @@ class Plotter(object):
 
 
     @staticmethod
-    def scatterplot(**kwargs):
-        kwargs = Plotter.transform_input(**kwargs)
-        measure_objects = kwargs.get("measures")
-        location_objects = kwargs.get("locations")
-        start_date = kwargs.get("start_date")
-        end_date = kwargs.get("end_date")
-
-        if not measure_objects:
-            return {"message": "Invalid measure inputs."}, 401
-
-        if not location_objects:
-            return {"message": "Invalid location inputs."}, 401
-
-        if len(set([m.unit_of_measure.id for m in measure_objects])) > 1:
-            return {"message": "You must choose measures with the same unit of measurement."}, 401
-
-
-        colors = ["blue", "green", "orange", "red"]
-        i = 0
-        title_string = []
-        location_strings = set()
-        pyplot.rc('font', size=12)
-        fig, ax = pyplot.subplots(figsize=(10, 6))
-        for measure in measure_objects:        
-            title_string.append(measure.display)
-            for location in location_objects:
-                query = db.session.query(
-                    WaterwayReading.sample_date, 
-                    WaterwayReading.value
-                ).filter(
-                    WaterwayReading.chemical == measure,
-                    WaterwayReading.location == location, 
-                    WaterwayReading.sample_date.between(start_date, end_date)
-                )
-
-                location_strings.add(location.display)
-                results = query.all()
-                if results:
-                    sample_dates, values = zip(*results)
-                    ax.scatter(sample_dates, values, color=f"tab:{colors[i]}", label=f"{location.display} - {measure.display}", s=1)
-                    i += 1
-
-        title_string = " and ".join(title_string) + " Over Time\n" + ", ".join(location_strings)
-        ax.set_xlabel("Sample Dates")
+    def plot(**kwargs):
+        data = Plotter.retrieve_data(**kwargs)
+        df = data["dataframe"]
+        ct = kwargs["chart_type"]
         
-        sample_measurment = measure_objects[0]
-        ax.set_ylabel(f"Value ({sample_measurment.unit_of_measure})")
-        ax.set_title(title_string)
-        ax.grid(True)
+        if not data.get("locations"):
+            return {"message": "You must select at least one location."}, 400
+        if not data.get("measures"):
+            return {"message": "You must select at least one measure."}, 400
+        
+        condense = kwargs.get("condenser")
+        in_kwargs = dict(
+            x="sample_date", 
+            y="value", 
+            facet_col="location",
+            facet_row="measure", 
+            height=900,
+            width=1000, 
+        )
+        
+        if ct == "grad_scatter":
+            in_kwargs["y"] = "location"
+            in_kwargs["size"] = "value" 
+            in_kwargs["size_max"] = 80
+            in_kwargs["color"] = "location"
+            in_kwargs.pop("facet_col", None)
+            in_kwargs.pop("facet_row", None)
+            
+            if len(data["measures"]) > 1:
+                return {"message": "You can only use one measure for this chart type."}, 400
+             
+        
+        if ct == "histogram":
+            in_kwargs.pop("y", None)
+        
+    
+        num_measures = len(data["measures"])
+        if condense and num_measures == 1:
+            in_kwargs.pop("facet_col", None)
+            in_kwargs.pop("facet_row", None)
+            in_kwargs["color"] = "location"
+        elif num_measures != 1 and condense:
+            return {"message": "You can only specify one measure type for a condensed chart."}, 400
+        
+        func = px.scatter if ct == "grad_scatter" else getattr(px, ct)
+        fig = func(
+            df, 
+            **in_kwargs
+        )
 
-        # Shrink current axis's height by 10% on the bottom
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0 + box.height * 0.1,
-                        box.width, box.height * 0.9])
-
-        # Put a legend below current axis
-        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=5, prop={'size': 9})
-        Plotter.save_plot("scatterplot")
-        return {"message": "Successfully created.", "uri": f"/chart/scatterplot/latest?t={random.randint(1, 99999999)}"}, 201
+        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+        html = poff.plot(
+            fig, 
+            include_plotlyjs=False, 
+            output_type="div"
+        )
+                
+        response = make_response(html)
+        response.mimetype = "text/html"
+        return response, 201
        
 
 
@@ -186,6 +249,27 @@ class Chemical(db.Model):
     unit_of_measure_id = db.Column(db.ForeignKey('unit_of_measure.id'))
 
     unit_of_measure = db.relationship('UnitOfMeasure', primaryjoin='Chemical.unit_of_measure_id == UnitOfMeasure.id', backref='chemicals')
+
+    @property
+    def json(self):
+        return {
+            "id": int(self.id),
+            "name": self.name, 
+            "display": self.display,
+            "unit": str(self.unit_of_measure.unit_name.decode()), 
+            "uri": f"/rest/measure/{self.id}"
+        }
+
+    @staticmethod
+    def get(id):
+        if not id:
+            return {"message": "Not found"}, 404
+        else:
+            result = Chemical.query.filter_by(id=id).first()
+            if result:
+                return result.json, 200
+            else:
+                return {"message": "Measure not found."}, 404
 
 
     @staticmethod
@@ -258,8 +342,10 @@ class Location(db.Model):
                 "display": self.display,
                 "type": {
                     "id": self.location_type.id,
-                    "name": self.location_type.name
-                } 
+                    "name": self.location_type.name, 
+                    "description": self.location_type.description
+                }, 
+                "uri": f"/rest/location/{int(self.id)}" 
             }, 
             "geometry": { 
                 "type": "Point", 
@@ -275,6 +361,9 @@ class Location(db.Model):
             } 
         }
     
+    @property
+    def json(self):
+        return self.geojson
 
     @staticmethod
     def all_locations_geojson(include_waste=True):
@@ -315,6 +404,10 @@ class UnitOfMeasure(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     unit_name = db.Column(db.String(10), unique=True)
 
+    @property
+    def decoded(self):
+        return str(self.unit_name.decode())
+
     def __str__(self):
         return self.unit_name.decode()
 
@@ -334,6 +427,20 @@ class WaterwayReading(db.Model):
     chemical = db.relationship('Chemical', primaryjoin='WaterwayReading.chemical_id == Chemical.id', backref='waterway_readings')
     location = db.relationship('Location', primaryjoin='WaterwayReading.location_id == Location.id', backref='waterway_readings')
 
+    @hybrid_property
+    def location_measure(self):
+        return f"{self.location.display} - {self.chemical.display}"
+
+    @property 
+    def json(self):
+        return {
+            "id": int(self.id), 
+            "value": float(self.value),
+            "sample_date": self.sample_date.strftime("%Y-%m-%d"),
+            "location": self.location.json, 
+            "measure": self.chemical.json
+        }
+
 
     @staticmethod
     def min_sample_date():
@@ -346,6 +453,74 @@ class WaterwayReading(db.Model):
         return db.session.query(
             db.func.max(WaterwayReading.sample_date)
         ).scalar()
+
+    @staticmethod
+    def search():
+        args = dict(request.args)
+        args = WaterwayReading.transform_input(**args)
+        
+        location_ids = [loc.id for loc in args["locations"]]
+        measure_ids = [ms.id for ms in args["measures"]]
+        query = WaterwayReading.query.filter(
+            db.between(
+                WaterwayReading.sample_date,
+                args["start_date"],
+                args["end_date"]
+            )
+        )
+
+        if location_ids:
+            query = query.filter(WaterwayReading.location_id.in_(location_ids))
+        if measure_ids:
+            query = query.filter(WaterwayReading.chemical_id.in_(measure_ids))
+
+        data = query.all()
+
+        if data:
+            response = {"results": [row.json for row in data], "message": "Ok."}, 200
+        else:
+            response = {"results": [], "message": "None found."}, 200
+        return response
+
+
+    @staticmethod
+    def transform_input(**kwargs):
+        input_args = kwargs
+
+        exclude = kwargs.pop("exclude", [])
+        if exclude:
+            for arg in exclude:
+                input_args.pop(arg, None)
+        out_args = {}
+
+        if "measures" not in exclude and kwargs.get("measures"):
+            measures = ast.literal_eval(kwargs.get("measures"))
+            out_args["measures"] = Chemical.query.filter(Chemical.id.in_(measures)).all()
+        else: 
+            out_args["measures"] = []
+
+        if "locations" not in exclude and kwargs.get("locations"):
+            locations = ast.literal_eval(kwargs.get("locations"))
+            out_args["locations"] = Location.query.filter(Location.id.in_(locations)).all()
+        else: 
+            out_args["locations"] = []
+
+        if "start_date" not in exclude:
+            start_date = kwargs.get("start_date")
+            if not start_date:
+                start_date = datetime.datetime(1998, 1, 1)
+            else:
+                start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d")
+            out_args["start_date"] = start_date
+        if "end_date" not in exclude:
+            end_date = kwargs.get("end_date")
+            if not end_date:
+                end_date = datetime.datetime.now()
+            else:
+                end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d")
+            out_args["end_date"] = end_date
+        return out_args
+
 
 
 class WaterwayReadingMaster(db.Model):

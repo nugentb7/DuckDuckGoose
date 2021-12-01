@@ -27,6 +27,7 @@ let bounds;
 let wasteLayer;
 let sensorLayer;
 let maxZoom;
+let rivers, lakes;
 
 let imageUrl = "/static/images/waterways_map.jpg",
     imageBounds = rasterBounds;
@@ -51,6 +52,7 @@ let layerControl = L.control.layers(
     {},
     { "collapsed" : false }
 ).addTo(mymap);
+
 
 $.get(
     "/rest/locations/", 
@@ -78,25 +80,13 @@ $.get(
                     }
                 );
 
-                marker.bindPopup(
-                    "<span>Some stuff about <b>"+feature["properties"]["display"]+"</b></span>"
-                );
                 if (feature["properties"]["type"]["name"] === "WASTE") {
                     wasteMarkers.push(marker);
                 } else {
                     sensorMarkers.push(marker);
-                }
-                
-                //marker.addTo(mymap);
+                }                
             }                
         });
-
-        bounds = points.getBounds();
-        mymap.fitBounds(bounds);
-        mymap.setMaxBounds(bounds.pad(1));
-        
-        mymap.setMinZoom(mymap.getZoom());
-
     }
 ).done(function() {
     sensorLayer = L.layerGroup(sensorMarkers);
@@ -106,24 +96,59 @@ $.get(
     layerControl.addOverlay(sensorLayer, "Sensors");
     layerControl.addOverlay(wasteLayer, "Kasios Dumping Location");
     layerControl.addOverlay(ogMap, "Original Map");
+    $.get(
+        "/static/data/lakes.geojson", 
+        function(data) {
+            lakes = L.geoJSON(data, {});
+            lakes.setStyle({"fillColor":"blue", "fillOpacity": 1, "color": "blue", "weight": 1});
+        }
+    ).done(function() {
+        lakes.addTo(mymap);
+        layerControl.addOverlay(lakes, "Lakes");
+        $.get(
+            "/static/data/rivers.geojson", 
+            function(data) {
+                rivers = L.geoJSON(data, {});
+                rivers.setStyle({"weight": 2, "color": "blue"});
+            }
+        ).done(function() {
+            rivers.addTo(mymap);
+            layerControl.addOverlay(rivers, "Rivers");
+            bounds = rivers.getBounds();
+            mymap.fitBounds(bounds);
+            mymap.setMaxBounds(bounds.pad(1));
+            
+            mymap.setMinZoom(mymap.getZoom());
+        });
+    });
 });
 
 $("#measure-search").select2({
     "ajax": {
-        "url": "/rest/measure"
+        "url": "/rest/measures"
     },
-    "theme": "bootstrap", 
-    "maximumSelectionLength": 2
+    "theme": "bootstrap"
 });
 
 $("#sensor-search").select2({
-    "maximumSelectionLength": 2, 
     "theme": "bootstrap"
 });
+
 
 $("#chart-type").select2({
     "theme": "bootstrap"
 });
+
+$("select").on("select2:select", function (evt) {
+    var element = evt.params.data.element;
+    var $element = $(element);
+
+    $element.detach();
+    $(this).append($element);
+    $(this).trigger("change");
+});
+
+
 
 $("#generate").click(function() {
     let chartType = $("#chart-type").val();
@@ -146,7 +171,8 @@ $("#generate").click(function() {
             "measures"  : JSON.stringify(measures), 
             "chart_type": chartType,
             "start_date": $("#start-date").val(),
-            "end_date": $("#end-date").val()
+            "end_date": $("#end-date").val(),
+            "condenser": $("#condenser").is(":checked") ? 1 : ""
         },
         beforeSend: function() {
             $("#report-img").attr("src", "");
@@ -154,7 +180,8 @@ $("#generate").click(function() {
         }, 
         success: function(data) {
             bootbox.alert("Success");
-            $("#report-img").attr("src", data["uri"]);
+            $("#chart").empty();
+            $("#chart").html(data);
         }, 
         error: function(xhr, status, error) {
             bootbox.alert(JSON.parse(xhr.responseText).message);
@@ -164,3 +191,4 @@ $("#generate").click(function() {
         }
     });
 });
+
