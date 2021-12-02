@@ -1,6 +1,12 @@
 # Duck Duck Goose
 
-This repository will house all relevant files for our final project!
+This repository houses all files for our final project.
+
+## Apps
+- [Web App](https://duck-duck-goose.herokuapp.com)
+- [d3.js Observable workbook](https://observablehq.com/d/377e9b6eed0ff437)
+
+*Note: for the d3.js visual, you must check the locations in order for the errors to clear*
 
 ## Team members 
 
